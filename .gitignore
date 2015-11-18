@@ -3,3 +3,6 @@ bin
 composer.phar
 composer.lock
 phpunit.xml
+*~
+.DS_Store
+.idea

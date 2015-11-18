@@ -56,6 +56,13 @@ class RedsysManager
     protected $secretKey;
 
     /**
+     * @var array
+     *
+     * Payment vars
+     */
+    private $varsPay;
+
+    /**
      * Construct method for redsys manager
      *
      * @param PaymentEventDispatcher $paymentEventDispatcher Event dispatcher
@@ -105,6 +112,7 @@ class RedsysManager
         if (!$this->paymentBridge->getOrder()) {
 
             throw new PaymentOrderNotFoundException();
+            throw new PaymentOrderNotFoundException();
         }
 
         /**
@@ -142,32 +150,31 @@ class RedsysManager
 
         $redsysMethod =  new RedsysMethod();
 
-        $dsSignature           = $parameters['Ds_Signature'];
-        $dsResponse            = $parameters['Ds_Response'];
-        $dsAmount              = $parameters['Ds_Amount'];
-        $dsOrder               = $parameters['Ds_Order'];
-        $dsMerchantCode        = $parameters['Ds_MerchantCode'];
-        $dsCurrency            = $parameters['Ds_Currency'];
-        $dsSecret               = $this->secretKey;
-        $dsDate                 = $parameters['Ds_Date'];
-        $dsHour                 = $parameters['Ds_Hour'];
-        $dsSecurePayment        = $parameters['Ds_SecurePayment'];
-        $dsCardCountry          = $parameters['Ds_Card_Country'];
-        $dsAuthorisationCode    = $parameters['Ds_AuthorisationCode'];
-        $dsConsumerLanguage     = $parameters['Ds_ConsumerLanguage'];
-        $dsCardType             = (array_key_exists('Ds_Card_Type', $parameters) ? $parameters['Ds_Card_Type'] : '');
-        $dsMerchantData         = (array_key_exists('Ds_MerchantData', $parameters) ? $parameters['Ds_MerchantData'] : '');
+        $dsSignature            = $parameters['Ds_Signature'];
+        $dsParams               = $parameters['Ds_MerchantParameters'];
+        $dsVersion              = $parameters['Ds_SignatureVersion'];
 
-        if ($dsSignature != $this
-                ->expectedSignature(
-                    $dsAmount,
-                    $dsOrder,
-                    $dsMerchantCode,
-                    $dsCurrency,
-                    $dsResponse,
-                    $dsSecret
-                )
-            ) {
+        $paramsDecoded = base64_decode(strtr($dsParams, '-_', '+/'));
+        $this->varsPay = json_decode($paramsDecoded, true);
+
+
+        $dsResponse            = $this->varsPay['Ds_Response'];
+        $dsAmount              = $this->varsPay['Ds_Amount'];
+        $dsOrder               = $this->varsPay['Ds_Order'];
+        $dsMerchantCode        = $this->varsPay['Ds_MerchantCode'];
+        $dsCurrency            = $this->varsPay['Ds_Currency'];
+        $dsDate                 = $this->varsPay['Ds_Date'];
+        $dsHour                 = $this->varsPay['Ds_Hour'];
+        $dsSecurePayment        = $this->varsPay['Ds_SecurePayment'];
+        $dsCardCountry          = $this->varsPay['Ds_Card_Country'];
+        $dsAuthorisationCode    = $this->varsPay['Ds_AuthorisationCode'];
+        $dsConsumerLanguage     = $this->varsPay['Ds_ConsumerLanguage'];
+        $dsCardType             = (array_key_exists('Ds_Card_Type', $this->varsPay) ? $this->varsPay['Ds_Card_Type'] : '');
+        $dsMerchantData         = (array_key_exists('Ds_MerchantData', $this->varsPay) ? $this->varsPay['Ds_MerchantData'] : '');
+
+
+        if ($dsSignature != $this->expectedSignature($dsParams))
+        {
             throw new InvalidSignatureException();
         }
 
@@ -256,27 +263,17 @@ class RedsysManager
     /**
      * Returns the expected signature
      *
-     * @param string $amount       Amount
-     * @param string $order        Order
-     * @param string $merchantCode Merchant Code
-     * @param string $currency     Currency
-     * @param string $response     Response code
-     * @param string $secret       Secret
+     * @param string $dsParams Params
      *
      * @return Signature string String
      */
-    protected function expectedSignature(
-        $amount,
-        $order,
-        $merchantCode,
-        $currency,
-        $response,
-        $secret
-    )
+    protected function expectedSignature($dsParams)
     {
-        $signature = $amount . $order . $merchantCode . $currency . $response . $secret;
-        // SHA1
-        return strtoupper(sha1($signature));
+        $key = base64_decode($this->secretKey);
+        $key = $this->encrypt3DES($this->getOrderNotif(), $key);
+        $signature = strtr(base64_encode(hash_hmac('sha256', $dsParams, $key, true)), '+/', '-_');
+
+        return $signature;
     }
 
     /**
@@ -289,20 +286,9 @@ class RedsysManager
     protected function checkResultParameters(array $parameters)
     {
         $list = array(
-            'Ds_Date',
-            'Ds_Hour',
-            'Ds_Amount',
-            'Ds_Currency',
-            'Ds_Order',
-            'Ds_MerchantCode',
-            'Ds_Terminal',
-            'Ds_Signature',
-            'Ds_Response',
-            'Ds_TransactionType',
-            'Ds_SecurePayment',
-            'Ds_Card_Country',
-            'Ds_AuthorisationCode',
-            'Ds_ConsumerLanguage',
+            'Ds_SignatureVersion',
+            'Ds_MerchantParameters',
+            'Ds_Signature'
         );
         foreach ($list as $item) {
             if (!isset($parameters[$item])) {
@@ -310,4 +296,23 @@ class RedsysManager
             }
         }
     }
+
+    protected function encrypt3DES($message, $key){
+        $bytes = array(0,0,0,0,0,0,0,0);
+        $iv = implode(array_map("chr", $bytes));
+        $ciphertext = mcrypt_encrypt(MCRYPT_3DES, $key, $message, MCRYPT_MODE_CBC, $iv);
+
+        return $ciphertext;
+    }
+
+    protected function getOrderNotif(){
+        $order = "";
+        if(empty($this->varsPay['Ds_Order'])){
+            $order = $this->varsPay['DS_ORDER'];
+        } else {
+            $order = $this->varsPay['Ds_Order'];
+        }
+        return $order;
+    }
+
 }

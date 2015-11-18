@@ -34,6 +34,7 @@ class RedsysExtension extends Extension
         $config = $this->processConfiguration($configuration, $configs);
 
         $container->setParameter('redsys.merchant.code', $config['merchant_code']);
+        $container->setParameter('redsys.merchant.terminal', $config['merchant_terminal']);
         $container->setParameter('redsys.secret.key', $config['secret_key']);
         $container->setParameter('redsys.url', $config['url']);
 
