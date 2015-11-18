@@ -7,6 +7,7 @@ services:
             payment.bridge: @payment.bridge
             url.factory: @redsys.url.factory
             redsys.merchant.code: %redsys.merchant.code%
+            redsys.merchant.terminal: %redsys.merchant.terminal%
             redsys.secret.key: %redsys.secret.key%
             redsys.url: %redsys.url%
 
